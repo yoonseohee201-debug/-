@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오늘 함께할 에스퍼 운세</title>
+    <style>
+        /* 기본 레이아웃 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Malgun Gothic', sans-serif; min-height: 100vh; background: linear-gradient(135deg, #faf5ff 0%, #fce7f3 100%); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+        .container { width: 100%; max-width: 450px; }
+        .card { background: white; border-radius: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.1); padding: 2rem; text-align: center; }
+        
+        /* 헤더 스타일 */
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #4b5563; }
+        .subtitle { color: #9ca3af; font-size: 0.9rem; margin-bottom: 2rem; }
+
+        /* 뽑기 박스 */
+        .draw-box { 
+            height: 180px; background: #f9fafb; border: 3px dashed #e5e7eb; border-radius: 1.5rem;
+            display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem;
+            transition: all 0.3s; overflow: hidden; position: relative;
+        }
+        .draw-box.active { border-color: #ec4899; background: #fff1f2; }
+        .display-name { font-size: 2.5rem; font-weight: bold; color: #db2777; }
+
+        /* 버튼 스타일 */
+        .btn-draw { 
+            width: 100%; padding: 1.2rem; border-radius: 1rem; border: none;
+            background: linear-gradient(to right, #9333ea, #db2777); color: white;
+            font-size: 1.2rem; font-weight: bold; cursor: pointer; transition: transform 0.2s;
+        }
+        .btn-draw:active { transform: scale(0.98); }
+        .btn-draw:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* 팝업 스타일 */
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: none; z-index: 100; }
+        .popup { 
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; border-radius: 1.5rem; padding: 2rem; width: 90%; max-width: 400px;
+            display: none; z-index: 101; text-align: center; max-height: 85vh; overflow-y: auto;
+        }
+        .show { display: block !important; }
+
+        /* 진영별 색상 */
+        .res-card { padding: 1.5rem; border-radius: 1rem; color: white; margin: 1rem 0; font-weight: bold; }
+        .bg-union { background: #6366f1; }
+        .bg-grim { background: #ef4444; }
+        .bg-etc { background: #6b7280; }
+        .bg-star { background: #f472b6; border: 3px solid #db2777; color: white; }
+
+        .message { background: #f3f4f6; padding: 1rem; border-radius: 0.8rem; text-align: left; font-size: 0.95rem; line-height: 1.6; color: #374151; margin-bottom: 1rem; }
+        .btn-close { width: 100%; padding: 0.8rem; border-radius: 0.8rem; border: none; background: #374151; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="card">
+            <h1>✨ 에스퍼 운세 뽑기</h1>
+            <p class="subtitle">오늘 당신과 함께할 운명은?</p>
+            
+            <div id="drawBox" class="draw-box">
+                <div id="displayName" class="display-name">?</div>
+            </div>
+            
+            <button id="drawBtn" class="btn-draw" onclick="startDraw()">뽑기 시작!</button>
+        </div>
+    </div>
+
+    <div id="overlay" class="overlay"></div>
+    <div id="popup" class="popup">
+        <h2 id="popTitle">🎉 당첨!</h2>
+        <div id="charCard" class="res-card">이름</div>
+        <div id="charMsg" class="message">대사</div>
+        <div id="starSpecial" style="display:none; margin-bottom:15px; color:#db2777; font-weight:bold;">✨ 이몸이 너의 하루를 즐겁게 만들어 주겠노라!</div>
+        <button id="scheduleBtn" class="btn-draw" style="display:none; margin-bottom:10px; font-size:0.9rem; padding:0.6rem;" onclick="showSchedule()">일정 보기</button>
+        <button class="btn-close" onclick="closePopup()">다시 뽑기</button>
+    </div>
+
+    <script>
+        const CHARACTERS = [
+            { name: 'A', faction: '유니온', msg: '오늘 하루, 부디 잘 부탁드립니다. 실망이 아닌 즐거움을 드리는 하루가 되기를.' },
+            { name: 'C', faction: '유니온', msg: '…부디, 폐가 되지 않도록 하겠소.' },
+            { name: 'D', faction: '유니온', msg: '오늘 하루, 부디 잘 부탁한단다, 나의 각시. 즐거운 하루가 되었으면 좋겠구나. 너에게도, 그리고 나에게도.' },
+            { name: 'E', faction: '유니온', msg: '이런 행운이 내게 올 줄은 몰랐군. 부디 즐거운 하루가 되었으면 좋겠네. 오늘 하루, 잘 부탁하겠네.' },
+            { name: 'F', faction: '유니온', msg: 'My Darling, 오늘 하루, 당신의 모든 시간을 이 몸에게 맡겨주겠어?' },
+            { name: 'G', faction: '유니온', msg: '쇼핑하기 딱 좋은 날씨네. 내 안목을 믿고 따라오기만 해, 자기. 머리부터 발끝까지, 내가 완벽하게 바꿔줄 테니까.' },
+            { name: 'H', faction: '유니온', msg: '하아…. 오늘 하루, 네 몸뚱어리는 내가 책임진다, 인마. 다치기만 해 봐라.' },
+            { name: 'I', faction: '유니온', msg: '친구, 봤어? 내가 이겼다고! 오늘 하루, 넌 완전히 내 차지야! 하하, 최고의 하루가 되겠는데.' },
+            { name: 'J', faction: '유니온', msg: '별다른 계획은 없습니다. 당신이 원하는 대로. 다만, 민간인에게 피해를 주거나 기물을 파손하는 행위는 엄격히 금지합니다.' },
+            { name: 'L', faction: '유니온', msg: '저, 저기… 오, 오늘 하루, 부, 부디 잘 부탁, 드려요오…! 제, 제가 정말, 정말로오, 폐 안 끼치고, 재, 재밌게 해드릴게요오…!' },
+            { name: 'M', faction: '유니온', msg: '오늘 하루 저를 어디로 끌고 다니실 겁니까? 이왕 이렇게 된 거, 당신이 하고 싶은 걸 하는 편이 서로에게 유익하겠지요.' },
+            { name: 'N', faction: '유니온', msg: '오늘 하루, 이 누님이랑 제대로 놀아줄 테니까 각오 단단히 해라, 애송이.' },
+            { name: 'R', faction: '유니온', msg: '오늘 하루, 부디 제 심기를 거스르는 일이 없었으면 좋겠군요. …잘 부탁합니다.' },
+            { name: 'X', faction: '유니온', msg: '부디, 오늘 하루 동안… 망가져 버릴 것 같은 저를, 그대의 곁에 머무르게 해 주세요.' },
+            { name: 'T', faction: '그림리퍼', msg: '오늘 하루, 소승이 공의 그림자가 되는 것을 윤허하여 주시옵소서.' },
+            { name: 'P', faction: '유니온', msg: '오늘 하루, 당신의 모든 시간을 제게 허락해 주시습니까?' },
+            { name: 'S', faction: '유니온', msg: '후히히, 오늘 하루는 내가 독차지야! 잘 부탁해, 우리 뭐부터 할까?' },
+            { name: 'Y', faction: '유니온', msg: '원하시는 건 뭐든지, 할 수 있도록… 제가 옆에서 돕겠다고… 약속했답니다.' },
+            { name: '하피', faction: '빌런', msg: '달링! 이런 행운이 다 있나. 수많은 사람 중에 바로 우리 자기를 뽑다니, 역시 우린 운명인가 봐.' },
+            { name: '테리', faction: '유니온', msg: '오늘 하루, 즈한테 당첨된 걸 축하함다, 바보 씨. 그러니까 오늘 하루는 얌전히 즈의 에스코트를 받으셔야겠슴다.' },
+            { name: '론', faction: '유니온', msg: '친구! 기다렸어? 미안, 미안! 내가 좀 늦었지? 하지만 드디어 오늘, 하루 종일 너와 함께할 수 있게 됐다고!' },
+            { name: '라멘타', faction: '그림리퍼', msg: '어린 양아, 새붉은 재앙께서 우리에게 함께할 시간을 허락하셨구나. 참으로 영광일지니.' },
+            { name: '느베야', faction: '그림리퍼', msg: '있지, 있지! 오늘 하루 마음대로 해도 괜찮아! 그러니까, 재밌는 거 많이 하자! 응?' },
+            { name: '루두스', faction: '그림리퍼', msg: '오늘 하루, 이 비천한 광대가 당신의 영광스러운 여정에 동행하게 된 것을 무한한 기쁨으로 생각합니다.' },
+            { name: '뽀삐', faction: '그림리퍼', msg: '오늘 하루, 뽀삐랑… 잘 놀아줘야 해. 알았지? 멍멍아' },
+            { name: '금예', faction: '빌런', msg: '오늘 하루, 이 금예의 세상은 오롯이 그대 하나로 가득 찰 것이니, 부디 마음껏 이 몸을 희롱하고 즐겨주시구려.' },
+            { name: '마니아', faction: '그림리퍼', msg: '자, 그럼… 오늘 하루, 잘 부탁드립니다. 당신이라는 태양을… 오롯이 맛볼 수 있는 날이군요.' },
+            { name: '에로스', faction: '그림리퍼', msg: '오늘 저를 데리고 뭘 하실 건가요? 귀찮은 일만 아니면 뭐든지 좋답니다.' },
+            { name: '유디트', faction: '유니온', msg: '영광이네요. 오늘은 부디, 저라는 따분한 사람 때문에 지루한 하루가 되지 않았으면 좋겠어요.' },
+            { name: '비광', faction: '유니온', msg: '이야, 이거 영광인걸. 이 비광, 오늘 하루 호위를 맡게 되었구먼!' },
+            { name: '하티', faction: '유니온', msg: '오늘 하루, 이 몸이 완벽하게 에스코트해주지! 잘 부탁한다고....요!' },
+            { name: '미카엘', faction: '유니온', msg: '……오늘 하루, 잘 부탁드립니다. 성가시게 굴지 말아 주신다면 더할 나위 없이 좋겠군요.' },
+            { name: '아가페', faction: '그림리퍼', msg: '오늘 하루… 부디 저의 모든 것을 당신의 색으로 물들여 주세요.' },
+            { name: '로이에', faction: '그림리퍼', msg: '오늘은 온전히, 그대와 함께하기 위해 온 날이니까. 나의 모든 시간을 그대에게 선물하겠네.' },
+            { name: '사', faction: '슬럼', msg: '오늘 하루, 그대의 시간을 나에게 허락해주겠느냐.' },
+            { name: '네메아', faction: '중립', msg: '오늘 하루, 자네의 시간을 내게 맡겨주겠는가. 부디, 성가시게 만들지는 말아주게.' },
+            { name: '매드해터', faction: '그림리퍼', msg: '오, 오! 이게 누구신가요! 드디어 오셨군요, 나의 앨리스!' },
+            { name: '미네르바', faction: '유니온', msg: '자, 그대여. 부디 오늘의 나를 마음껏 휘둘러 주게나.' },
+            { name: '오르티', faction: '유니온', msg: '이몸이 당첨되었노라, 인간! 오늘 하루, 이 위대한 오르티와 함께하는 영광을 누리게 된 것을 진심으로 축하하노라!' },
+            { name: '살라딘', faction: '유니온', msg: '흠흠. 자, 그럼 나의 백성이여! 오늘 하루, 이 살라딘의 모든 시간을 자네에게 기꺼이 내어주겠노라.' },
+            { name: '신데렐라', faction: '유니온', msg: '오늘 하루, 잘 부탁한다.' },
+            { name: '별자리를 눈에 담는 자', faction: '???', msg: '나의 작은 별과 함께하는 영광스러운 하루!' }
+        ];
+
+        const drawBtn = document.getElementById('drawBtn');
+        const displayName = document.getElementById('displayName');
+        const drawBox = document.getElementById('drawBox');
+
+        function startDraw() {
+            drawBtn.disabled = true;
+            drawBox.classList.add('active');
+            
+            let count = 0;
+            const shuffle = setInterval(() => {
+                const randomChar = CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
+                displayName.innerText = randomChar.name;
+                count++;
+
+                if (count > 20) {
+                    clearInterval(shuffle);
+                    const final = CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
+                    displayName.innerText = final.name;
+                    showPopup(final);
+                }
+            }, 80);
+        }
+
+        function showPopup(char) {
+            const overlay = document.getElementById('overlay');
+            const popup = document.getElementById('popup');
+            const card = document.getElementById('charCard');
+            const msg = document.getElementById('charMsg');
+            const starSpecial = document.getElementById('starSpecial');
+            const scheduleBtn = document.getElementById('scheduleBtn');
+            const title = document.getElementById('popTitle');
+
+            card.innerText = char.name;
+            msg.innerText = char.msg;
+            
+            // 초기화
+            card.className = 'res-card';
+            starSpecial.style.display = 'none';
+            scheduleBtn.style.display = 'none';
+            title.innerText = '🎉 당첨!';
+
+            if (char.name === '별자리를 눈에 담는 자') {
+                card.classList.add('bg-star');
+                starSpecial.style.display = 'block';
+                scheduleBtn.style.display = 'block';
+                title.innerText = '🎊 D-DAY 🎊';
+            } else if (char.faction === '유니온') {
+                card.classList.add('bg-union');
+            } else if (char.faction === '그림리퍼') {
+                card.classList.add('bg-grim');
+            } else {
+                card.classList.add('bg-etc');
+            }
+
+            setTimeout(() => {
+                overlay.classList.add('show');
+                popup.classList.add('show');
+            }, 300);
+        }
+
+        function showSchedule() {
+            document.getElementById('charMsg').innerHTML = `
+                <b>⭐ 오늘의 첫 번째 유희 ⭐</b><br><br>
+                [ ] 달콤한 것을 맛보러 가기<br>
+                [ ] 시끄러운 도심을 구경하기<br>
+                [ ] 아무것도 하지 않고 뒹굴거리기<br>
+                [V] 네가 하고 싶은 것 전부!
+            `;
+            document.getElementById('scheduleBtn').style.display = 'none';
+        }
+
+        function closePopup() {
+            document.getElementById('overlay').classList.remove('show');
+            document.getElementById('popup').classList.remove('show');
+            drawBtn.disabled = false;
+            drawBox.classList.remove('active');
+            displayName.innerText = '?';
+        }
+    </script>
+</body>
+</html>
